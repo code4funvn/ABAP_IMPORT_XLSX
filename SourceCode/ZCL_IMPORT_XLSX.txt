@@ -1,0 +1,190 @@
+class ZCL_IMPORT_XLSX definition
+  public
+  final
+  create public .
+
+public section.
+
+  constants EXTENSION type STRING value 'XLSX' ##NO_TEXT.
+
+  class-methods IMPORT_XSLX
+    exporting
+      !ET_DATA type STANDARD TABLE .
+  class-methods EXPORT_XSLX
+    importing
+      !IT_DATA type STANDARD TABLE
+      !I_TEMPLATE type STRING
+      value(I_FILENAME) type STRING optional .
+  class-methods EXPORT_XSLX_FLAT
+    importing
+      !IS_DATA type ANY
+      !I_TEMPLATE type STRING
+      value(I_FILENAME) type STRING optional .
+protected section.
+private section.
+ENDCLASS.
+
+
+
+CLASS ZCL_IMPORT_XLSX IMPLEMENTATION.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_IMPORT_XLSX=>EXPORT_XSLX
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IT_DATA                        TYPE        STANDARD TABLE
+* | [--->] I_TEMPLATE                     TYPE        STRING
+* | [--->] I_FILENAME                     TYPE        STRING(optional)
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD EXPORT_XSLX.
+*    DATA LW_FILENAME TYPE IBIPPARMS-PATH.
+    DATA:
+      LT_RAW_DATA TYPE MIME_DATA,
+      LW_EXT      TYPE CHAR10.
+    DATA: LW_NAME     TYPE STRING,
+          LW_FILENAME TYPE STRING,
+          LW_PATH     TYPE STRING,
+          LW_FULLPATH TYPE STRING,
+          LW_RESULT   TYPE I.
+    CHECK IT_DATA[] IS NOT INITIAL.
+
+*    CALL FUNCTION 'F4_FILENAME'
+*      EXPORTING
+*        PROGRAM_NAME  = SY-REPID
+*        DYNPRO_NUMBER = SYST-DYNNR
+*        FIELD_NAME    = 'export_data.xlsx'
+*      IMPORTING
+*        FILE_NAME     = LW_FILENAME.
+    IF I_FILENAME IS NOT INITIAL.
+      LW_NAME = I_FILENAME.
+    ELSE.
+      LW_NAME = 'export_data.xlsx'.
+    ENDIF.
+    CALL METHOD CL_GUI_FRONTEND_SERVICES=>FILE_SAVE_DIALOG
+      EXPORTING
+        DEFAULT_EXTENSION = 'XLSX'
+        DEFAULT_FILE_NAME = LW_NAME
+      CHANGING
+        FILENAME          = LW_FILENAME
+        PATH              = LW_PATH
+        FULLPATH          = LW_FULLPATH
+        USER_ACTION       = LW_RESULT.
+
+    CALL FUNCTION 'ZXLWB_CALLFORM'
+      EXPORTING
+        IV_FORMNAME           = I_TEMPLATE
+        IV_VIEWER_TITLE       = 'Data Export'
+        IV_CONTEXT_REF        = IT_DATA[]
+        IV_VIEWER_SUPPRESS    = 'X'
+*       IV_SAVE_AS            = LW_FILENAME
+        IV_SAVE_AS            = LW_FULLPATH
+      IMPORTING
+        EV_DOCUMENT_RAWDATA   = LT_RAW_DATA
+        EV_DOCUMENT_EXTENSION = LW_EXT
+      EXCEPTIONS
+        OTHERS                = 2.
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_IMPORT_XLSX=>EXPORT_XSLX_FLAT
+* +-------------------------------------------------------------------------------------------------+
+* | [--->] IS_DATA                        TYPE        ANY
+* | [--->] I_TEMPLATE                     TYPE        STRING
+* | [--->] I_FILENAME                     TYPE        STRING(optional)
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD EXPORT_XSLX_FLAT.
+*    DATA LW_FILENAME TYPE IBIPPARMS-PATH.
+    DATA:
+      LT_RAW_DATA TYPE MIME_DATA,
+      LW_EXT      TYPE CHAR10.
+    DATA: LW_NAME     TYPE STRING,
+          LW_FILENAME TYPE STRING,
+          LW_PATH     TYPE STRING,
+          LW_FULLPATH TYPE STRING,
+          LW_RESULT   TYPE I.
+    CHECK IS_DATA IS NOT INITIAL.
+
+    IF I_FILENAME IS NOT INITIAL.
+      LW_NAME = I_FILENAME.
+    ELSE.
+      LW_NAME = 'export_data.xlsx'.
+    ENDIF.
+    CALL METHOD CL_GUI_FRONTEND_SERVICES=>FILE_SAVE_DIALOG
+      EXPORTING
+        DEFAULT_EXTENSION = 'XLSX'
+        DEFAULT_FILE_NAME = LW_NAME
+      CHANGING
+        FILENAME          = LW_FILENAME
+        PATH              = LW_PATH
+        FULLPATH          = LW_FULLPATH
+        USER_ACTION       = LW_RESULT.
+    CHECK LW_FULLPATH IS NOT INITIAL.
+    CALL FUNCTION 'ZXLWB_CALLFORM'
+      EXPORTING
+        IV_FORMNAME           = I_TEMPLATE
+        IV_VIEWER_TITLE       = 'Data Export'
+        IV_CONTEXT_REF        = IS_DATA
+        IV_VIEWER_SUPPRESS    = 'X'
+        IV_SAVE_AS            = LW_FULLPATH
+      IMPORTING
+        EV_DOCUMENT_RAWDATA   = LT_RAW_DATA
+        EV_DOCUMENT_EXTENSION = LW_EXT
+      EXCEPTIONS
+        PROCESS_TERMINATED    = 1
+        OTHERS                = 2.
+
+  ENDMETHOD.
+
+
+* <SIGNATURE>---------------------------------------------------------------------------------------+
+* | Static Public Method ZCL_IMPORT_XLSX=>IMPORT_XSLX
+* +-------------------------------------------------------------------------------------------------+
+* | [<---] ET_DATA                        TYPE        STANDARD TABLE
+* +--------------------------------------------------------------------------------------</SIGNATURE>
+  METHOD IMPORT_XSLX.
+    DATA: LT_FILETABLE   TYPE FILETABLE,
+          LS_FILE        TYPE FILE_TABLE,
+          LW_RETURN_CODE TYPE I,
+          LW_EXT(4)      TYPE C,
+          LT_TXT_FILE    TYPE TRUXS_T_TEXT_DATA,
+          LW_FILE_NAME   TYPE RLGRAP-FILENAME.
+*    Open Dialog
+    CALL METHOD CL_GUI_FRONTEND_SERVICES=>FILE_OPEN_DIALOG
+      EXPORTING
+        DEFAULT_EXTENSION = 'XLSX'
+      CHANGING
+        FILE_TABLE        = LT_FILETABLE
+        RC                = LW_RETURN_CODE.
+    READ TABLE LT_FILETABLE INTO LS_FILE INDEX 1.
+*   Check extension file
+    CALL FUNCTION 'TRINT_FILE_GET_EXTENSION'
+      EXPORTING
+        FILENAME  = LS_FILE-FILENAME
+      IMPORTING
+        EXTENSION = LW_EXT.
+
+    IF LW_EXT <> 'XLSX' AND LW_EXT <> 'XLS' AND LW_EXT IS NOT INITIAL.
+      MESSAGE S001(ZVPB_AMC) DISPLAY LIKE 'E'.
+      RETURN.
+    ENDIF.
+    LW_FILE_NAME = LS_FILE-FILENAME.
+*   Read data to dynamic table
+    CALL FUNCTION 'TEXT_CONVERT_XLS_TO_SAP'
+      EXPORTING
+        I_LINE_HEADER        = 'X'
+        I_TAB_RAW_DATA       = LT_TXT_FILE
+        I_FILENAME           = LW_FILE_NAME
+      TABLES
+        I_TAB_CONVERTED_DATA = ET_DATA[]
+      EXCEPTIONS
+        CONVERSION_FAILED    = 1
+        OTHERS               = 2.
+
+    IF SY-SUBRC <> 0.
+      MESSAGE ID SY-MSGID TYPE SY-MSGTY NUMBER SY-MSGNO
+              WITH SY-MSGV1 SY-MSGV2 SY-MSGV3 SY-MSGV4.
+    ENDIF.
+  ENDMETHOD.
+ENDCLASS.
